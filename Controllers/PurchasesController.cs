@@ -9,6 +9,9 @@ using System.Security.Claims;
 
 namespace CarDealership.Api.Controllers;
 
+
+// This controller handles customer purchase actions
+// Only customers can call these routes
 [ApiController]
 [Route("api/purchases")]
 [Authorize(Roles = "Customer")]
@@ -16,7 +19,6 @@ public class PurchasesController(AppDbContext db, IOtpService otp) : ControllerB
 {
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
-    // Purchase Request MUST be OTP-protected (purpose = Purchase)
     [HttpPost("request")]
     public async Task<IActionResult> RequestPurchase([FromBody] PurchaseRequestDto dto)
     {
@@ -40,6 +42,7 @@ public class PurchasesController(AppDbContext db, IOtpService otp) : ControllerB
         return Ok(new { message = "Purchase request submitted.", requestId = pr.Id });
     }
 
+    // Returns a list of past sales for this customer
     [HttpGet("history")]
     public async Task<IActionResult> History()
     {

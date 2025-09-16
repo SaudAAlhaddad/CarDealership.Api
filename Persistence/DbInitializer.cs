@@ -6,6 +6,9 @@ using System.Text;
 
 namespace CarDealership.Api.Persistence;
 
+// This method runs when the app starts
+// It makes sure the database exists, create admin and sample vehicles
+
 public static class DbInitializer
 {
     public static async Task InitAsync(AppDbContext db)

@@ -19,6 +19,7 @@ public interface IJwtService
     string CreateToken(User user);
 }
 
+// This service creates tokens for users who are logged in
 public class JwtService(IOptions<JwtOptions> options) : IJwtService
 {
     private readonly JwtOptions _opt = options.Value;

@@ -7,24 +7,23 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using Microsoft.OpenApi.Models;
+using CarDealership.Api.Filters;
+
+// This is the startup file of the CarDealership API
+// It sets up and configures everything before the app runs
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Config binding
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection("Otp"));
 
-// EF Core (SQLite)
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
-// Services
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddHttpContextAccessor();
 
-// AuthN: JWT Bearer
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -40,19 +39,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// AuthZ
 builder.Services.AddAuthorization();
 
-// Controllers + model validation
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<TrimAndNormalizeFilter>(); // trims strings & lowercases Email
+});
 
-// Swagger (OpenAPI) with JWT support
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Car Dealership API", Version = "v1" });
 
-    // Use ApiKey scheme (works reliably across Swashbuckle versions)
     var jwtScheme = new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
@@ -82,24 +80,20 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Migrate & seed
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await DbInitializer.InitAsync(db);
 }
 
-// Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(o =>
     {
-        // Optional: keep token between refreshes
         o.ConfigObject.AdditionalItems["persistAuthorization"] = true;
     });
 }
-
 
 app.UseHttpsRedirection();
 app.UseAuthentication();

@@ -5,7 +5,7 @@ public enum OtpPurpose { Register = 1, Login = 2, Purchase = 3, UpdateVehicle = 
 public class OtpToken
 {
     public int Id { get; set; }
-    public string Subject { get; set; } = default!; // email used for Register/Login; user email for others
+    public string Subject { get; set; } = default!; 
     public OtpPurpose Purpose { get; set; }
     public string Code { get; set; } = default!;
     public DateTime ExpiresAt { get; set; }

@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CarDealership.Api.Data;
 
+// This connects C# entity classes to the actual database tables
+
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();

@@ -6,9 +6,9 @@ public class PurchaseRequest
 {
     public int Id { get; set; }
     public int VehicleId { get; set; }
-    public Vehicle Vehicle { get; set; } = default!;
     public int CustomerId { get; set; }
-    public User Customer { get; set; } = default!;
+    public Vehicle Vehicle { get; set; } = default!;
     public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
+    public User Customer { get; set; } = default!;
     public PurchaseStatus Status { get; set; } = PurchaseStatus.Pending;
 }

@@ -2,6 +2,7 @@ using CarDealership.Api.Data;
 using CarDealership.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
 namespace CarDealership.Api.Services;
 
@@ -16,17 +17,20 @@ public interface IOtpService
     Task<bool> ValidateAsync(string subjectEmail, OtpPurpose purpose, string code, bool consume = true);
 }
 
+// This handles creating and checking OTPs
 public class OtpService : IOtpService
 {
     private readonly AppDbContext _db;
     private readonly int _expiryMinutes;
+    private readonly ILogger<OtpService> _log;
 
-    public OtpService(AppDbContext db, IOptions<OtpOptions> options)
+    public OtpService(AppDbContext db, IOptions<OtpOptions> options, ILogger<OtpService> log)
     {
         _db = db;
         _expiryMinutes = options.Value.ExpiryMinutes;
+        _log = log;
 
-        Console.WriteLine($"[OtpService] OTP expiry = {_expiryMinutes} minutes");
+        _log.LogInformation("OTP expiry configured to {ExpiryMinutes} minutes", _expiryMinutes);
     }
 
     public async Task<string> GenerateAsync(string subjectEmail, OtpPurpose purpose)
@@ -43,7 +47,12 @@ public class OtpService : IOtpService
         _db.OtpTokens.Add(token);
         await _db.SaveChangesAsync();
 
-        Console.WriteLine($"[OTP] To={token.Subject} Purpose={purpose} Code={code} ExpiresAt={token.ExpiresAt:o}");
+        // Structured log (metadata only)
+        _log.LogInformation("Generated OTP for {Email} with purpose {Purpose}, expires at {ExpiresAt}",
+            token.Subject, purpose, token.ExpiresAt);
+
+        // Dev-only OTP code print
+        Console.WriteLine($"[OTP] {code}");
 
         return code;
     }

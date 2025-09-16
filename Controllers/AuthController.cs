@@ -8,6 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CarDealership.Api.Controllers;
 
+// This controller handles auth-related endpoints under /api/auth
+// It supports: requesting OTP, registering a new customer, logging in 
+
 [ApiController]
 [Route("api/auth")]
 public class AuthController(AppDbContext db, IOtpService otp, IJwtService jwt, ILogger<AuthController> log) : ControllerBase

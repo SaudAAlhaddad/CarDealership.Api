@@ -6,11 +6,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CarDealership.Api.Controllers;
 
+// This controller holds all admin-only features.
+// It can only be used if the logged-in user has role = Admin.
+// Routes start with /api/admin
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "Admin")]
 public class AdminController(AppDbContext db) : ControllerBase
 {
+    // GET /api/admin/customers
+    // Admins can list all customers (that are not admins)
     [HttpGet("customers")]
     public async Task<IActionResult> GetCustomers()
     {
@@ -22,6 +27,8 @@ public class AdminController(AppDbContext db) : ControllerBase
         return Ok(customers);
     }
 
+    // POST /api/admin/process-sale/{purchaseRequestId}
+    // Admin approves a pending purchase request
     [HttpPost("process-sale/{purchaseRequestId:int}")]
     public async Task<IActionResult> ProcessSale(int purchaseRequestId)
     {

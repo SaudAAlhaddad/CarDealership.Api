@@ -8,6 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CarDealership.Api.Controllers;
 
+// This controller handles all vehicle actions
+// Customers can browse cars and see details
+// Admins can add or update vehicles 
 [ApiController]
 [Route("api/vehicles")]
 public class VehiclesController(AppDbContext db, IOtpService otp) : ControllerBase
@@ -51,7 +54,6 @@ public class VehiclesController(AppDbContext db, IOtpService otp) : ControllerBa
         return CreatedAtAction(nameof(Details), new { id = v.Id }, v);
     }
 
-    // Update Vehicle MUST be OTP-protected (purpose = UpdateVehicle)
     [HttpPut("{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(int id, [FromBody] VehicleUpdateDto dto, [FromServices] IHttpContextAccessor accessor)
@@ -59,7 +61,6 @@ public class VehiclesController(AppDbContext db, IOtpService otp) : ControllerBa
         var v = await db.Vehicles.FindAsync(id);
         if (v is null) return NotFound();
 
-        // Who is the admin? We rely on their email claim
         var email = accessor.HttpContext?.User?.Claims.FirstOrDefault(c => c.Type.Contains("email", StringComparison.OrdinalIgnoreCase))?.Value
                     ?? accessor.HttpContext?.User?.Identity?.Name;
         if (string.IsNullOrEmpty(email)) return Unauthorized();
