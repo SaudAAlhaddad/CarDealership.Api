@@ -31,8 +31,7 @@ You can run this API locally or inside a Docker container.
 
 # 1. Local Run (with .NET SDK)
 
-Clone the repo: 
-git clone https://github.com
+Clone the repo then
 cd CarDealership.Api
 
 Run the API: 
