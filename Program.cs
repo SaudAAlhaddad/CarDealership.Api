@@ -95,6 +95,16 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+if (app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+app.Run();
+
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
