@@ -1,10 +1,9 @@
-using CarDealership.Api.Data;
 using CarDealership.Api.Dtos;
 using CarDealership.Api.Entities;
-using CarDealership.Api.Security;
 using CarDealership.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CarDealership.Api.Controllers;
 
@@ -13,52 +12,101 @@ namespace CarDealership.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AppDbContext db, IOtpService otp, IJwtService jwt, ILogger<AuthController> log) : ControllerBase
+public class AuthController(IOtpService otpService, IUserService userService, ILogger<AuthController> logger) : ControllerBase
 {
+    /// <summary>
+    /// Generates OTP for unauthenticated users (registration/login only)
+    /// Purchase OTPs must use the dedicated vehicle-bound endpoint
+    /// </summary>
     [HttpPost("request-otp")]
-    public async Task<IActionResult> RequestOtp([FromBody] RequestOtpDto dto)
+    public async Task<IActionResult> RequestOtp([FromBody] RequestOtpDto otpRequest)
     {
-        if (string.IsNullOrWhiteSpace(dto.Email)) return BadRequest("Email is required.");
-        if (!Enum.IsDefined(dto.Purpose)) return BadRequest("Invalid purpose.");
+        if (string.IsNullOrWhiteSpace(otpRequest.Email)) return BadRequest("Email is required.");
+        if (!Enum.IsDefined(otpRequest.Purpose)) return BadRequest("Invalid purpose.");
+        
+        // Purchase OTPs must use the dedicated endpoint for vehicle binding
+        if (otpRequest.Purpose == OtpPurpose.Purchase)
+            return BadRequest("Use /api/auth/request-purchase-otp endpoint for purchase OTPs.");
 
-        await otp.GenerateAsync(dto.Email, dto.Purpose);
+        await otpService.GenerateAsync(otpRequest.Email, otpRequest.Purpose);
         return Ok(new { message = "OTP generated. Check server console output." });
     }
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterDto dto)
+    /// <summary>
+    /// Generates vehicle-bound purchase OTP for authenticated customers
+    /// OTP is cryptographically bound to the specific vehicle to prevent misuse
+    /// </summary>
+    [HttpPost("request-purchase-otp")]
+    [Authorize]
+    public async Task<IActionResult> RequestPurchaseOtp([FromBody] RequestPurchaseOtpDto purchaseOtpRequest)
     {
-        if (!await otp.ValidateAsync(dto.Email, OtpPurpose.Register, dto.OtpCode))
-            return BadRequest("Invalid or expired OTP.");
+        // Extract customer email from JWT token (no need to send it in request)
+        var customerEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+        if (string.IsNullOrEmpty(customerEmail)) return Unauthorized("Email not found in token.");
+        if (purchaseOtpRequest.VehicleId <= 0) return BadRequest("Valid vehicle ID is required.");
 
-        if (await db.Users.AnyAsync(u => u.Email == dto.Email.ToLower()))
-            return Conflict("Email already registered.");
-
-        var user = new User
-        {
-            Email = dto.Email.ToLower(),
-            PasswordHash = PasswordHasher.Hash(dto.Password),
-            Role = UserRole.Customer,
-            FullName = dto.FullName
-        };
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-
-        var token = jwt.CreateToken(user);
-        return Ok(new AuthResultDto(token, user.Role.ToString(), user.Email, user.FullName ?? ""));
+        // Generate OTP bound to specific vehicle for security
+        await otpService.GenerateAsync(customerEmail, OtpPurpose.Purchase, purchaseOtpRequest.VehicleId);
+        return Ok(new { message = "Purchase OTP generated. Check server console output." });
     }
 
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginDto dto)
+    /// <summary>
+    /// Generates OTP for authenticated users (UpdateVehicle, etc.)
+    /// Email is extracted from JWT token to prevent spoofing
+    /// </summary>
+    [HttpPost("request-authenticated-otp")]
+    [Authorize]
+    public async Task<IActionResult> RequestAuthenticatedOtp([FromBody] RequestAuthenticatedOtpDto authenticatedOtpRequest)
     {
-        var user = await db.Users.SingleOrDefaultAsync(u => u.Email == dto.Email.ToLower());
-        if (user is null || user.PasswordHash != PasswordHasher.Hash(dto.Password))
-            return Unauthorized("Invalid credentials.");
+        // Extract user email from JWT token (no need to send it in request)
+        var userEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+        if (string.IsNullOrEmpty(userEmail)) return Unauthorized("Email not found in token.");
+        if (!Enum.IsDefined(authenticatedOtpRequest.Purpose)) return BadRequest("Invalid purpose.");
+        
+        // Purchase OTPs must use the dedicated endpoint for vehicle binding
+        if (authenticatedOtpRequest.Purpose == OtpPurpose.Purchase)
+            return BadRequest("Use /api/auth/request-purchase-otp endpoint for purchase OTPs.");
 
-        if (!await otp.ValidateAsync(dto.Email, OtpPurpose.Login, dto.OtpCode))
-            return BadRequest("Invalid or expired OTP.");
+        await otpService.GenerateAsync(userEmail, authenticatedOtpRequest.Purpose);
+        return Ok(new { message = "OTP generated. Check server console output." });
+    }
 
-        var token = jwt.CreateToken(user);
-        return Ok(new AuthResultDto(token, user.Role.ToString(), user.Email, user.FullName ?? ""));
+    /// <summary>
+    /// Registers a new customer with OTP validation
+    /// </summary>
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterDto registrationData)
+    {
+        try
+        {
+            var authResult = await userService.RegisterAsync(registrationData);
+            return Ok(authResult);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Authenticates existing user with password and OTP validation
+    /// Returns JWT token for subsequent requests
+    /// </summary>
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginDto loginCredentials)
+    {
+        try
+        {
+            var authResult = await userService.LoginAsync(loginCredentials);
+            return Ok(authResult);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }

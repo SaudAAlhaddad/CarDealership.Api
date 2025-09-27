@@ -6,31 +6,39 @@ using System.Text;
 
 namespace CarDealership.Api.Persistence;
 
-// This method runs when the app starts
-// It makes sure the database exists, create admin and sample vehicles
-
+/// <summary>
+/// Database initialization utility that runs on application startup
+/// Performs migrations and seeds the database with initial admin user and sample vehicles
+/// </summary>
 public static class DbInitializer
 {
-    public static async Task InitAsync(AppDbContext db)
+    /// <summary>
+    /// Initializes the database by running migrations and seeding initial data
+    /// </summary>
+    /// <param name="dbContext">The database context to initialize</param>
+    public static async Task InitAsync(AppDbContext dbContext)
     {
-        await db.Database.MigrateAsync();
+        // Apply any pending database migrations
+        await dbContext.Database.MigrateAsync();
 
-        if (!await db.Users.AnyAsync())
+        // Seed admin user if no users exist
+        if (!await dbContext.Users.AnyAsync())
         {
-            // admin: admin@dealer.com / Password123!
-            var admin = new User
+            // Default admin credentials: admin@dealer.com / Password123!
+            var defaultAdmin = new User
             {
                 Email = "admin@dealer.com",
                 PasswordHash = Hash("Password123!"),
                 Role = UserRole.Admin,
                 FullName = "Admin User"
             };
-            db.Users.Add(admin);
+            dbContext.Users.Add(defaultAdmin);
         }
 
-        if (!await db.Vehicles.AnyAsync())
+        // Seed sample vehicles if no vehicles exist
+        if (!await dbContext.Vehicles.AnyAsync())
         {
-            var seed = new[]
+            var sampleVehicles = new[]
             {
                 new Vehicle { Make="Toyota", Model="Camry", Year=2021, Price=88000, Color="White" },
                 new Vehicle { Make="Toyota", Model="Corolla", Year=2022, Price=76000, Color="Silver" },
@@ -43,16 +51,21 @@ public static class DbInitializer
                 new Vehicle { Make="BMW", Model="330i", Year=2023, Price=210000 },
                 new Vehicle { Make="Mercedes", Model="C200", Year=2022, Price=230000 }
             };
-            db.Vehicles.AddRange(seed);
+            dbContext.Vehicles.AddRange(sampleVehicles);
         }
 
-        await db.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Creates a SHA256 hash of the input string (used for admin password)
+    /// </summary>
+    /// <param name="input">String to hash</param>
+    /// <returns>Hexadecimal hash representation</returns>
     public static string Hash(string input)
     {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes);
+        using var sha256 = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(hashBytes);
     }
 }

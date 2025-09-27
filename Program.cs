@@ -9,22 +9,31 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using CarDealership.Api.Filters;
 
-// This is the startup file of the CarDealership API
-// It sets up and configures everything before the app runs
+/// <summary>
+/// CarDealership API Startup Configuration
+/// Sets up services, authentication, authorization, and middleware pipeline
+/// </summary>
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure application settings from appsettings.json
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection("Otp"));
 
+// Configure Entity Framework with SQLite database
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
+// Register application services (business logic layer)
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IVehicleService, VehicleService>();
+builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddHttpContextAccessor();
 
-var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
+// Configure JWT authentication
+var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -33,25 +42,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt.Issuer,
-            ValidAudience = jwt.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key))
+            ValidIssuer = jwtOptions.Issuer,
+            ValidAudience = jwtOptions.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key))
         };
     });
 
+// Enable role-based authorization
 builder.Services.AddAuthorization();
 
+// Configure controllers with input sanitization filter
 builder.Services.AddControllers(options =>
 {
-    options.Filters.Add<TrimAndNormalizeFilter>(); // trims strings & lowercases Email
+    options.Filters.Add<TrimAndNormalizeFilter>(); // Automatically trims strings & lowercases Email fields
 });
 
+// Configure Swagger/OpenAPI documentation
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+builder.Services.AddSwaggerGen(swaggerConfig =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Car Dealership API", Version = "v1" });
+    swaggerConfig.SwaggerDoc("v1", new OpenApiInfo { Title = "Car Dealership API", Version = "v1" });
 
-    var jwtScheme = new OpenApiSecurityScheme
+    // Configure JWT Bearer authentication for Swagger
+    var jwtSecurityScheme = new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
         Name = "Authorization",
@@ -60,9 +73,10 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer",
     };
 
-    c.AddSecurityDefinition("Bearer", jwtScheme);
+    swaggerConfig.AddSecurityDefinition("Bearer", jwtSecurityScheme);
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    // Require JWT authentication for all endpoints in Swagger
+    swaggerConfig.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
@@ -80,23 +94,26 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Initialize database with sample data (migrations + seeding)
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await DbInitializer.InitAsync(db);
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DbInitializer.InitAsync(dbContext);
 }
 
+// Configure development-only middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(o =>
+    app.UseSwaggerUI(swaggerUIConfig =>
     {
-        o.ConfigObject.AdditionalItems["persistAuthorization"] = true;
+        // Persist JWT authorization across browser refreshes
+        swaggerUIConfig.ConfigObject.AdditionalItems["persistAuthorization"] = true;
     });
 }
 
-app.UseHttpsRedirection();
-app.UseAuthentication();
+// Configure middleware pipeline (order matters!)
+app.UseAuthentication();  // Must come before UseAuthorization
 app.UseAuthorization();
 app.MapControllers();
 app.Run();

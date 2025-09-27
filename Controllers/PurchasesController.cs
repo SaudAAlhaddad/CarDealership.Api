@@ -1,63 +1,53 @@
-using CarDealership.Api.Data;
 using CarDealership.Api.Dtos;
-using CarDealership.Api.Entities;
 using CarDealership.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace CarDealership.Api.Controllers;
-
 
 // This controller handles customer purchase actions
 // Only customers can call these routes
 [ApiController]
 [Route("api/purchases")]
 [Authorize(Roles = "Customer")]
-public class PurchasesController(AppDbContext db, IOtpService otp) : ControllerBase
+public class PurchasesController(IPurchaseService purchaseService) : ControllerBase
 {
-    private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+    /// <summary>
+    /// Extracts the authenticated customer's user ID from JWT token claims
+    /// </summary>
+    private int GetCustomerUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
     [HttpPost("request")]
-    public async Task<IActionResult> RequestPurchase([FromBody] PurchaseRequestDto dto)
+    public async Task<IActionResult> RequestPurchase([FromBody] PurchaseRequestDto purchaseRequest)
     {
-        var userId = GetUserId();
-        var user = await db.Users.FindAsync(userId);
-        if (user is null) return Unauthorized();
-
-        var ok = await otp.ValidateAsync(user.Email, OtpPurpose.Purchase, dto.OtpCode);
-        if (!ok) return BadRequest("Invalid or expired OTP for purchase.");
-
-        var v = await db.Vehicles.FindAsync(dto.VehicleId);
-        if (v is null || !v.IsAvailable) return BadRequest("Vehicle not available.");
-
-        var pr = new PurchaseRequest
+        try
         {
-            VehicleId = v.Id,
-            CustomerId = userId
-        };
-        db.PurchaseRequests.Add(pr);
-        await db.SaveChangesAsync();
-        return Ok(new { message = "Purchase request submitted.", requestId = pr.Id });
+            var customerId = GetCustomerUserId();
+            var purchaseResult = await purchaseService.CreatePurchaseRequestAsync(
+                purchaseRequest.VehicleId, 
+                customerId, 
+                purchaseRequest.OtpCode);
+            return Ok(purchaseResult);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
-    // Returns a list of past sales for this customer
+    /// <summary>
+    /// Returns a list of past purchases/sales for the authenticated customer
+    /// </summary>
     [HttpGet("history")]
     public async Task<IActionResult> History()
     {
-        var userId = GetUserId();
-        var sales = await db.Sales
-            .Include(s => s.Vehicle)
-            .Where(s => s.CustomerId == userId)
-            .Select(s => new
-            {
-                s.Id,
-                s.SoldAt,
-                s.Price,
-                Vehicle = new { s.Vehicle.Make, s.Vehicle.Model, s.Vehicle.Year }
-            })
-            .ToListAsync();
-        return Ok(sales);
+        var customerId = GetCustomerUserId();
+        var purchaseHistory = await purchaseService.GetCustomerPurchaseHistoryAsync(customerId);
+        return Ok(purchaseHistory);
     }
 }

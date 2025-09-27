@@ -1,8 +1,6 @@
-using CarDealership.Api.Data;
-using CarDealership.Api.Entities;
+using CarDealership.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CarDealership.Api.Controllers;
 
@@ -12,48 +10,33 @@ namespace CarDealership.Api.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "Admin")]
-public class AdminController(AppDbContext db) : ControllerBase
+public class AdminController(IUserService userService, IPurchaseService purchaseService) : ControllerBase
 {
-    // GET /api/admin/customers
-    // Admins can list all customers (that are not admins)
+    /// <summary>
+    /// Lists all registered customers (non-admin users)
+    /// </summary>
     [HttpGet("customers")]
     public async Task<IActionResult> GetCustomers()
     {
-        var customers = await db.Users
-            .Where(u => u.Role == UserRole.Customer)
-            .Select(u => new { u.Id, u.Email, u.FullName })
-            .ToListAsync();
-
-        return Ok(customers);
+        var customerList = await userService.GetAllCustomersAsync();
+        return Ok(customerList);
     }
 
-    // POST /api/admin/process-sale/{purchaseRequestId}
-    // Admin approves a pending purchase request
+    /// <summary>
+    /// Approves a pending purchase request and completes the sale
+    /// Marks vehicle as unavailable and creates sale record
+    /// </summary>
     [HttpPost("process-sale/{purchaseRequestId:int}")]
     public async Task<IActionResult> ProcessSale(int purchaseRequestId)
     {
-        var pr = await db.PurchaseRequests
-            .Include(p => p.Vehicle)
-            .SingleOrDefaultAsync(p => p.Id == purchaseRequestId);
-
-        if (pr is null) return NotFound("Purchase request not found.");
-        if (pr.Status != PurchaseStatus.Pending) return BadRequest("Request already decided.");
-
-        var vehicle = pr.Vehicle;
-        if (vehicle is null || !vehicle.IsAvailable) return BadRequest("Vehicle not available.");
-
-        vehicle.IsAvailable = false;
-        pr.Status = PurchaseStatus.Approved;
-
-        var sale = new Entities.Sale
+        try
         {
-            VehicleId = vehicle.Id,
-            CustomerId = pr.CustomerId,
-            Price = vehicle.Price
-        };
-        db.Sales.Add(sale);
-
-        await db.SaveChangesAsync();
-        return Ok(new { message = "Sale processed.", saleId = sale.Id });
+            var saleResult = await purchaseService.ProcessPurchaseRequestAsync(purchaseRequestId);
+            return Ok(saleResult);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }
