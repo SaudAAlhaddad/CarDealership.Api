@@ -3,13 +3,22 @@ using System.Text;
 
 namespace CarDealership.Api.Security;
 
-// This service turns passwords into SHA256 hashe to not store the passwords as plain text in the database
+/// <summary>
+/// Static utility class for password hashing using SHA256
+/// Converts plain text passwords to irreversible hashes for secure storage
+/// Note: SHA256 is used here for simplicity, but bcrypt/Argon2 are recommended for production
+/// </summary>
 public static class PasswordHasher
 {
-    public static string Hash(string input)
+    /// <summary>
+    /// Creates a SHA256 hash of the input password
+    /// </summary>
+    /// <param name="plainTextPassword">The password to hash</param>
+    /// <returns>Hexadecimal string representation of the hash</returns>
+    public static string Hash(string plainTextPassword)
     {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes);
+        using var sha256 = SHA256.Create();
+        var passwordBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(plainTextPassword));
+        return Convert.ToHexString(passwordBytes);
     }
 }

@@ -3,36 +3,47 @@ using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace CarDealership.Api.Filters;
 
-// This filter runs before controller actions
-// Its job is to clean up user input automatically 
-// trims extra spaces from all string fields
-// converts email to lowercase
+/// <summary>
+/// Global action filter that automatically sanitizes user input
+/// - Trims whitespace from all string properties
+/// - Converts email fields to lowercase for consistency
+/// Runs before controller actions execute
+/// </summary>
 public class TrimAndNormalizeFilter : IActionFilter
 {
+    /// <summary>
+    /// Executes before controller action - sanitizes input data
+    /// </summary>
     public void OnActionExecuting(ActionExecutingContext context)
     {
-        foreach (var arg in context.ActionArguments.Values)
+        // Process all action arguments (DTOs, parameters, etc.)
+        foreach (var actionArgument in context.ActionArguments.Values)
         {
-            if (arg is null) continue;
+            if (actionArgument is null) continue;
 
-            var props = arg.GetType().GetProperties()
-                .Where(p => p.CanRead && p.CanWrite && p.PropertyType == typeof(string));
+            // Find all string properties that can be read and written
+            var stringProperties = actionArgument.GetType().GetProperties()
+                .Where(property => property.CanRead && property.CanWrite && property.PropertyType == typeof(string));
 
-            foreach (var p in props)
+            foreach (var stringProperty in stringProperties)
             {
-                var val = (string?)p.GetValue(arg);
-                if (val is null) continue;
+                var currentValue = (string?)stringProperty.GetValue(actionArgument);
+                if (currentValue is null) continue;
 
-                var trimmed = val.Trim();
+                // Trim whitespace from string values
+                var sanitizedValue = currentValue.Trim();
 
-                // Normalize known fields
-                if (string.Equals(p.Name, "Email", StringComparison.OrdinalIgnoreCase))
-                    trimmed = trimmed.ToLowerInvariant();
+                // Normalize email fields to lowercase for consistency
+                if (string.Equals(stringProperty.Name, "Email", StringComparison.OrdinalIgnoreCase))
+                    sanitizedValue = sanitizedValue.ToLowerInvariant();
 
-                p.SetValue(arg, trimmed);
+                stringProperty.SetValue(actionArgument, sanitizedValue);
             }
         }
     }
 
+    /// <summary>
+    /// Executes after controller action - no cleanup needed
+    /// </summary>
     public void OnActionExecuted(ActionExecutedContext context) { }
 }

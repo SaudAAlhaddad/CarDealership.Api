@@ -7,6 +7,9 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CarDealership.Api.Security;
 
+/// <summary>
+/// Configuration options for JWT token generation
+/// </summary>
 public class JwtOptions
 {
     public string Issuer { get; set; } = default!;
@@ -19,14 +22,22 @@ public interface IJwtService
     string CreateToken(User user);
 }
 
-// This service creates tokens for users who are logged in
-public class JwtService(IOptions<JwtOptions> options) : IJwtService
+/// <summary>
+/// Service responsible for creating JWT tokens for authenticated users
+/// Tokens contain user identity and role information for authorization
+/// </summary>
+public class JwtService(IOptions<JwtOptions> jwtOptions) : IJwtService
 {
-    private readonly JwtOptions _opt = options.Value;
+    private readonly JwtOptions _jwtConfiguration = jwtOptions.Value;
 
+    /// <summary>
+    /// Creates a JWT token containing user claims (ID, email, role, name)
+    /// Token expires after 8 hours for security
+    /// </summary>
     public string CreateToken(User user)
     {
-        var claims = new[]
+        // Define user claims that will be embedded in the token
+        var userClaims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
@@ -34,11 +45,18 @@ public class JwtService(IOptions<JwtOptions> options) : IJwtService
             new Claim("name", user.FullName ?? "")
         };
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_opt.Key));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var token = new JwtSecurityToken(_opt.Issuer, _opt.Audience, claims,
-            expires: DateTime.UtcNow.AddHours(8), signingCredentials: creds);
+        // Create signing credentials using the secret key
+        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtConfiguration.Key));
+        var signingCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+        
+        // Create JWT token with claims and expiration
+        var jwtToken = new JwtSecurityToken(
+            issuer: _jwtConfiguration.Issuer, 
+            audience: _jwtConfiguration.Audience, 
+            claims: userClaims,
+            expires: DateTime.UtcNow.AddHours(8), 
+            signingCredentials: signingCredentials);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return new JwtSecurityTokenHandler().WriteToken(jwtToken);
     }
 }
