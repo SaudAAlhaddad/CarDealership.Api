@@ -58,7 +58,7 @@ public class AuthController(IOtpService otpService, IUserService userService, IL
     [Authorize]
     public async Task<IActionResult> RequestAuthenticatedOtp([FromBody] RequestAuthenticatedOtpDto authenticatedOtpRequest)
     {
-        // Extract user email from JWT token (no need to send it in request)
+        // Extract user email from JWT token 
         var userEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
         if (string.IsNullOrEmpty(userEmail)) return Unauthorized("Email not found in token.");
         if (!Enum.IsDefined(authenticatedOtpRequest.Purpose)) return BadRequest("Invalid purpose.");
